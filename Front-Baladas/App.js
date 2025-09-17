@@ -5,15 +5,21 @@ import {
   View,
   FlatList,
   TextInput,
-  Button,
-  Alert,
   ScrollView,
+  RefreshControl,
+  KeyboardAvoidingView,
+  Keyboard,
+  Platform,
+  TouchableWithoutFeedback,
+  TouchableOpacity,
 } from "react-native";
 
-const API_URL = "http://192.168.107.92:3000/baladas"; // sua API
+const API_URL = "http://192.168.107.27:3000/baladas";
 
 export default function App() {
   const [baladas, setBaladas] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
+
   const [idBusca, setIdBusca] = useState("");
   const [nomeBusca, setNomeBusca] = useState("");
   const [cidadeBusca, setCidadeBusca] = useState("");
@@ -27,83 +33,60 @@ export default function App() {
   const [data, setData] = useState("");
   const [idEditar, setIdEditar] = useState(null);
 
+  const [resultados, setResultados] = useState([]); // resultados das buscas
+
   // GET all
   const fetchBaladas = async () => {
     try {
       const res = await fetch(API_URL);
       const data = await res.json();
       setBaladas(data);
+      setResultados([]);
     } catch {
-      Alert.alert("Erro", "Não foi possível carregar baladas");
+      console.log("Erro ao carregar baladas");
     }
   };
 
-  // GET by ID
-  const fetchBaladaById = async () => {
+  useEffect(() => {
+    fetchBaladas();
+  }, []);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchBaladas();
+    setRefreshing(false);
+  };
+
+  // Buscar por ID corretamente
+ const fetchBaladaPorId = async () => {
     if (!idBusca) return;
     try {
       const res = await fetch(`${API_URL}/${idBusca}`);
+      if (res.status === 404) {
+        setResultados([{ id: 0, nome: "Nenhuma balada encontrada" }]);
+        return;
+      }
       const data = await res.json();
-      Alert.alert("Balada encontrada", JSON.stringify(data));
+      setResultados([data]);
     } catch {
-      Alert.alert("Erro", "Balada não encontrada");
+      setResultados([{ id: 0, nome: "Erro na busca" }]);
     }
   };
 
-  // GET by Nome
-  const fetchBaladasByNome = async () => {
-    if (!nomeBusca) return;
+  // Função genérica para outros campos
+  const fetchBaladasPorCampo = async (campo, valor) => {
+    if (!valor) return;
     try {
-      const res = await fetch(`${API_URL}/nome/${nomeBusca}`);
+      const res = await fetch(`${API_URL}/${campo}/${valor}`);
       const data = await res.json();
-      setBaladas(data);
+      setResultados(data.length ? data : [{ id: 0, nome: "Nenhum resultado encontrado" }]);
     } catch {
-      Alert.alert("Erro", "Nenhuma balada encontrada com esse nome");
+      setResultados([{ id: 0, nome: "Erro na busca" }]);
     }
   };
 
-  // GET by Cidade
-  const fetchBaladasByCidade = async () => {
-    if (!cidadeBusca) return;
-    try {
-      const res = await fetch(`${API_URL}/cidade/${cidadeBusca}`);
-      const data = await res.json();
-      setBaladas(data);
-    } catch {
-      Alert.alert("Erro", "Nenhuma balada encontrada nessa cidade");
-    }
-  };
-
-  // GET by Tipo
-  const fetchBaladasByTipo = async () => {
-    if (!tipoBusca) return;
-    try {
-      const res = await fetch(`${API_URL}/tipo/${tipoBusca}`);
-      const data = await res.json();
-      setBaladas(data);
-    } catch {
-      Alert.alert("Erro", "Nenhuma balada encontrada para esse tipo");
-    }
-  };
-
-  // GET by Data
-  const fetchBaladasByData = async () => {
-    if (!dataBusca) return;
-    try {
-      const res = await fetch(`${API_URL}/data/${dataBusca}`);
-      const data = await res.json();
-      setBaladas(data);
-    } catch {
-      Alert.alert("Erro", "Nenhuma balada encontrada para essa data");
-    }
-  };
-
-  // ADD balada
   const addBalada = async () => {
-    if (!nome || !cidade || !data) {
-      Alert.alert("Erro", "Preencha nome, cidade e data");
-      return;
-    }
+    if (!nome || !cidade || !data) return;
     try {
       await fetch(API_URL, {
         method: "POST",
@@ -117,11 +100,10 @@ export default function App() {
       setData("");
       fetchBaladas();
     } catch {
-      Alert.alert("Erro", "Não foi possível adicionar balada");
+      console.log("Erro ao adicionar balada");
     }
   };
 
-  // UPDATE balada
   const updateBalada = async () => {
     if (!idEditar || !nome || !cidade || !data) return;
     try {
@@ -138,160 +120,271 @@ export default function App() {
       setData("");
       fetchBaladas();
     } catch {
-      Alert.alert("Erro", "Não foi possível atualizar balada");
+      console.log("Erro ao atualizar balada");
     }
   };
 
-  // DELETE balada
   const deleteBalada = async (id) => {
     try {
       await fetch(`${API_URL}/${id}`, { method: "DELETE" });
       fetchBaladas();
     } catch {
-      Alert.alert("Erro", "Não foi possível deletar balada");
+      console.log("Erro ao deletar balada");
     }
   };
 
-  useEffect(() => {
-    fetchBaladas();
-  }, []);
-
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.titulo}>🎉 Lista de Baladas</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={{ paddingBottom: 40 }}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
+          <Text style={styles.titulo}>🎉 Lista de Baladas</Text>
 
-      <FlatList
-        data={baladas}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Text style={{ fontWeight: "bold" }}>{item.nome}</Text>
-            <Text>
-              {item.cidade} | {item.tipo} | {item.data}
+          <FlatList
+            data={baladas}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={({ item }) => (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>
+                  ID: {item.id} | Nome: {item.nome}
+                </Text>
+                <Text style={styles.cardText}>
+                  {item.cidade} | {item.tipo} | {item.data}
+                </Text>
+                <Text style={styles.cardText}>{item.endereco}</Text>
+                <View style={{ flexDirection: "row", marginTop: 10 }}>
+                  <TouchableOpacity
+                    style={styles.buttonEdit}
+                    onPress={() => {
+                      setIdEditar(item.id);
+                      setNome(item.nome);
+                      setCidade(item.cidade);
+                      setEndereco(item.endereco);
+                      setTipo(item.tipo);
+                      setData(item.data);
+                    }}
+                  >
+                    <Text style={styles.buttonText}>Editar</Text>
+                  </TouchableOpacity>
+                  <View style={{ width: 10 }} />
+                  <TouchableOpacity
+                    style={styles.buttonDelete}
+                    onPress={() => deleteBalada(item.id)}
+                  >
+                    <Text style={styles.buttonText}>Excluir</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+            scrollEnabled={false}
+          />
+
+          {resultados.length > 0 && (
+            <>
+              <Text style={styles.subtitulo}>🔍 Resultados da Busca</Text>
+              {resultados.map(item => (
+                <View
+                  key={item.id}
+                  style={[styles.card, { backgroundColor: "#e0f7fa" }]}
+                >
+                  <Text style={styles.cardTitle}>
+                    {item.id !== 0
+                      ? `ID: ${item.id} | Nome: ${item.nome}`
+                      : item.nome}
+                  </Text>
+                  {item.id !== 0 && (
+                    <>
+                      <Text style={styles.cardText}>
+                        {item.cidade} | {item.tipo} | {item.data}
+                      </Text>
+                      <Text style={styles.cardText}>{item.endereco}</Text>
+                    </>
+                  )}
+                </View>
+              ))}
+            </>
+          )}
+
+          <Text style={styles.subtitulo}>🔍 Buscar</Text>
+          <TextInput
+            placeholder="ID"
+            value={idBusca}
+            onChangeText={setIdBusca}
+            style={styles.input}
+          />
+          <TouchableOpacity
+            style={styles.buttonSearch}
+            onPress={fetchBaladaPorId}
+          >
+            <Text style={styles.buttonText}>Buscar por ID</Text>
+          </TouchableOpacity>
+
+          <TextInput
+            placeholder="Nome"
+            value={nomeBusca}
+            onChangeText={setNomeBusca}
+            style={styles.input}
+          />
+          <TouchableOpacity
+            style={styles.buttonSearch}
+            onPress={() => fetchBaladasPorCampo("nome", nomeBusca)}
+          >
+            <Text style={styles.buttonText}>Buscar por Nome</Text>
+          </TouchableOpacity>
+
+          <TextInput
+            placeholder="Cidade"
+            value={cidadeBusca}
+            onChangeText={setCidadeBusca}
+            style={styles.input}
+          />
+          <TouchableOpacity
+            style={styles.buttonSearch}
+            onPress={() => fetchBaladasPorCampo("cidade", cidadeBusca)}
+          >
+            <Text style={styles.buttonText}>Buscar por Cidade</Text>
+          </TouchableOpacity>
+
+          <TextInput
+            placeholder="Tipo"
+            value={tipoBusca}
+            onChangeText={setTipoBusca}
+            style={styles.input}
+          />
+          <TouchableOpacity
+            style={styles.buttonSearch}
+            onPress={() => fetchBaladasPorCampo("tipo", tipoBusca)}
+          >
+            <Text style={styles.buttonText}>Buscar por Tipo</Text>
+          </TouchableOpacity>
+
+          <TextInput
+            placeholder="Data (YYYY-MM-DD)"
+            value={dataBusca}
+            onChangeText={setDataBusca}
+            style={styles.input}
+          />
+          <TouchableOpacity
+            style={styles.buttonSearch}
+            onPress={() => fetchBaladasPorCampo("data", dataBusca)}
+          >
+            <Text style={styles.buttonText}>Buscar por Data</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.subtitulo}>
+            {idEditar ? "✏️ Editar Balada" : "➕ Adicionar Balada"}
+          </Text>
+          <TextInput
+            placeholder="Nome"
+            value={nome}
+            onChangeText={setNome}
+            style={styles.input}
+          />
+          <TextInput
+            placeholder="Cidade"
+            value={cidade}
+            onChangeText={setCidade}
+            style={styles.input}
+          />
+          <TextInput
+            placeholder="Endereço"
+            value={endereco}
+            onChangeText={setEndereco}
+            style={styles.input}
+          />
+          <TextInput
+            placeholder="Tipo"
+            value={tipo}
+            onChangeText={setTipo}
+            style={styles.input}
+          />
+          <TextInput
+            placeholder="Data (YYYY-MM-DD)"
+            value={data}
+            onChangeText={setData}
+            style={styles.input}
+          />
+          <TouchableOpacity
+            style={styles.buttonAdd}
+            onPress={idEditar ? updateBalada : addBalada}
+          >
+            <Text style={styles.buttonText}>
+              {idEditar ? "Atualizar Balada" : "Adicionar Balada"}
             </Text>
-            <Text>{item.endereco}</Text>
-            <View style={{ flexDirection: "row", marginTop: 5 }}>
-              <Button
-                title="Editar"
-                onPress={() => {
-                  setIdEditar(item.id);
-                  setNome(item.nome);
-                  setCidade(item.cidade);
-                  setEndereco(item.endereco);
-                  setTipo(item.tipo);
-                  setData(item.data);
-                }}
-              />
-              <View style={{ width: 10 }} />
-              <Button
-                title="Excluir"
-                color="red"
-                onPress={() => deleteBalada(item.id)}
-              />
-            </View>
-          </View>
-        )}
-      />
-
-      <Text style={styles.subtitulo}>🔍 Buscar</Text>
-      <TextInput
-        placeholder="ID"
-        value={idBusca}
-        onChangeText={setIdBusca}
-        style={styles.input}
-      />
-      <Button title="Buscar por ID" onPress={fetchBaladaById} />
-
-      <TextInput
-        placeholder="Nome"
-        value={nomeBusca}
-        onChangeText={setNomeBusca}
-        style={styles.input}
-      />
-      <Button title="Buscar por Nome" onPress={fetchBaladasByNome} />
-
-      <TextInput
-        placeholder="Cidade"
-        value={cidadeBusca}
-        onChangeText={setCidadeBusca}
-        style={styles.input}
-      />
-      <Button title="Buscar por Cidade" onPress={fetchBaladasByCidade} />
-
-      <TextInput
-        placeholder="Tipo"
-        value={tipoBusca}
-        onChangeText={setTipoBusca}
-        style={styles.input}
-      />
-      <Button title="Buscar por Tipo" onPress={fetchBaladasByTipo} />
-
-      <TextInput
-        placeholder="Data (YYYY-MM-DD)"
-        value={dataBusca}
-        onChangeText={setDataBusca}
-        style={styles.input}
-      />
-      <Button title="Buscar por Data" onPress={fetchBaladasByData} />
-
-      <Text style={styles.subtitulo}>
-        {idEditar ? "✏️ Editar Balada" : "➕ Adicionar Balada"}
-      </Text>
-      <TextInput
-        placeholder="Nome"
-        value={nome}
-        onChangeText={setNome}
-        style={styles.input}
-      />
-      <TextInput
-        placeholder="Cidade"
-        value={cidade}
-        onChangeText={setCidade}
-        style={styles.input}
-      />
-      <TextInput
-        placeholder="Endereço"
-        value={endereco}
-        onChangeText={setEndereco}
-        style={styles.input}
-      />
-      <TextInput
-        placeholder="Tipo"
-        value={tipo}
-        onChangeText={setTipo}
-        style={styles.input}
-      />
-      <TextInput
-        placeholder="Data (YYYY-MM-DD)"
-        value={data}
-        onChangeText={setData}
-        style={styles.input}
-      />
-
-      <Button
-        title={idEditar ? "Atualizar Balada" : "Adicionar Balada"}
-        onPress={idEditar ? updateBalada : addBalada}
-      />
-      <View style={{ height: 20 }} />
-    </ScrollView>
+          </TouchableOpacity>
+        </ScrollView>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, marginTop: 40 },
+  container: { flex: 1, padding: 20, marginTop: 40, backgroundColor: "#f2f2f2" },
   titulo: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: "bold",
-    marginBottom: 10,
     textAlign: "center",
+    marginBottom: 10,
+    color: "#00796b",
   },
-  subtitulo: { fontSize: 18, fontWeight: "bold", marginTop: 20 },
+  subtitulo: { fontSize: 20, fontWeight: "bold", marginTop: 20, color: "#004d40" },
   input: {
     borderWidth: 1,
     borderColor: "#ccc",
-    padding: 8,
+    padding: 10,
     marginVertical: 5,
-    borderRadius: 5,
+    borderRadius: 8,
+    backgroundColor: "#fff",
   },
-  card: { padding: 10, marginVertical: 5, borderWidth: 1, borderRadius: 5 },
+  card: {
+    padding: 15,
+    marginVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  cardTitle: { fontWeight: "bold", fontSize: 16, color: "#00796b" },
+  cardText: { fontSize: 14, color: "#555", marginTop: 3 },
+  buttonEdit: {
+    flex: 1,
+    backgroundColor: "#ffb300",
+    padding: 10,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  buttonDelete: {
+    flex: 1,
+    backgroundColor: "#d32f2f",
+    padding: 10,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  buttonSearch: {
+    backgroundColor: "#00796b",
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    marginVertical: 5,
+  },
+  buttonAdd: {
+    backgroundColor: "#388e3c",
+    padding: 15,
+    borderRadius: 8,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  buttonText: { color: "#fff", fontWeight: "bold" },
 });
