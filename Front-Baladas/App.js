@@ -5,13 +5,19 @@ import {
   View,
   FlatList,
   TextInput,
+  ScrollView,
+  RefreshControl,
+  KeyboardAvoidingView,
+  Keyboard,
+  Platform,
+  TouchableWithoutFeedback,
+  TouchableOpacity,
   Button,
   Alert,
-  ScrollView,
 } from "react-native";
 
 // URL da API (seu backend Express rodando no PC ou servidor)
-const API_URL = "http://(Coloque Seu IP Aqui):3000/baladas";
+const API_URL = "http://(Coloque seu IP Aqui):3000/baladas";
 
 export default function App() {
   /* ---------------- ESTADOS ---------------- */
@@ -35,6 +41,9 @@ export default function App() {
   // ID da balada que está sendo editada
   const [idEditar, setIdEditar] = useState(null);
 
+  // Estado para refresh
+  const [refreshing, setRefreshing] = useState(false);
+
   /* ---------------- FUNÇÕES DE API ---------------- */
   // GET todas as baladas
   const fetchBaladas = async () => {
@@ -43,7 +52,7 @@ export default function App() {
       const data = await res.json();
       setBaladas(data); // Atualiza lista
     } catch {
-      Alert.alert("Erro", "Não foi possível carregar baladas");
+      console.log("Erro ao carregar baladas");
     }
   };
 
@@ -52,10 +61,14 @@ export default function App() {
     if (!idBusca) return;
     try {
       const res = await fetch(`${API_URL}/${idBusca}`);
+      if (res.status === 404) {
+        setBaladas([{ id: 0, nome: "Nenhuma balada encontrada" }]);
+        return;
+      }
       const data = await res.json();
-      Alert.alert("Balada encontrada", JSON.stringify(data));
+      setBaladas([data]);
     } catch {
-      Alert.alert("Erro", "Balada não encontrada");
+      setBaladas([{ id: 0, nome: "Erro na busca" }]);
     }
   };
 
@@ -65,9 +78,9 @@ export default function App() {
     try {
       const res = await fetch(`${API_URL}/nome/${nomeBusca}`);
       const data = await res.json();
-      setBaladas(data);
+      setBaladas(data.length ? data : [{ id: 0, nome: "Nenhum resultado encontrado" }]);
     } catch {
-      Alert.alert("Erro", "Nenhuma balada encontrada com esse nome");
+      setBaladas([{ id: 0, nome: "Erro na busca" }]);
     }
   };
 
@@ -109,10 +122,7 @@ export default function App() {
 
   // POST - Adicionar balada
   const addBalada = async () => {
-    if (!nome || !cidade || !data) {
-      Alert.alert("Erro", "Preencha nome, cidade e data");
-      return;
-    }
+    if (!nome || !cidade || !data) return;
     try {
       await fetch(API_URL, {
         method: "POST",
@@ -127,7 +137,7 @@ export default function App() {
       setData("");
       fetchBaladas(); // Atualiza lista
     } catch {
-      Alert.alert("Erro", "Não foi possível adicionar balada");
+      console.log("Erro ao adicionar balada");
     }
   };
 
@@ -149,7 +159,7 @@ export default function App() {
       setData("");
       fetchBaladas();
     } catch {
-      Alert.alert("Erro", "Não foi possível atualizar balada");
+      console.log("Erro ao atualizar balada");
     }
   };
 
@@ -159,8 +169,14 @@ export default function App() {
       await fetch(`${API_URL}/${id}`, { method: "DELETE" });
       fetchBaladas();
     } catch {
-      Alert.alert("Erro", "Não foi possível deletar balada");
+      console.log("Erro ao deletar balada");
     }
+  };
+
+  // Função para refresh
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchBaladas().finally(() => setRefreshing(false));
   };
 
   // Carregar todas as baladas assim que o app abrir
@@ -170,99 +186,156 @@ export default function App() {
 
   /* ---------------- RENDERIZAÇÃO ---------------- */
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.titulo}>🎉 Lista de Baladas</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={{ paddingBottom: 40 }}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
+          <Text style={styles.titulo}>🎉 Lista de Baladas</Text>
 
-      {/* Lista de baladas */}
-      <FlatList
-        data={baladas}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Text style={{ fontWeight: "bold" }}>{item.nome}</Text>
-            <Text>
-              {item.cidade} | {item.tipo} | {item.data}
-            </Text>
-            <Text>{item.endereco}</Text>
+          {/* Lista de baladas */}
+          <FlatList
+            data={baladas}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={({ item }) => (
+              <View style={styles.card}>
+                <Text style={{ fontWeight: "bold" }}>{item.nome}</Text>
+                <Text>
+                  {item.cidade} | {item.tipo} | {item.data}
+                </Text>
+                <Text>{item.endereco}</Text>
 
-            {/* Botões Editar/Excluir */}
-            <View style={{ flexDirection: "row", marginTop: 5 }}>
-              <Button
-                title="Editar"
-                onPress={() => {
-                  setIdEditar(item.id);
-                  setNome(item.nome);
-                  setCidade(item.cidade);
-                  setEndereco(item.endereco);
-                  setTipo(item.tipo);
-                  setData(item.data);
-                }}
-              />
-              <View style={{ width: 10 }} />
-              <Button
-                title="Excluir"
-                color="red"
-                onPress={() => deleteBalada(item.id)}
-              />
-            </View>
-          </View>
-        )}
-      />
+                {/* Botões Editar/Excluir */}
+                <View style={{ flexDirection: "row", marginTop: 5 }}>
+                  <Button
+                    title="Editar"
+                    onPress={() => {
+                      setIdEditar(item.id);
+                      setNome(item.nome);
+                      setCidade(item.cidade);
+                      setEndereco(item.endereco);
+                      setTipo(item.tipo);
+                      setData(item.data);
+                    }}
+                  />
+                  <View style={{ width: 10 }} />
+                  <Button
+                    title="Excluir"
+                    color="red"
+                    onPress={() => deleteBalada(item.id)}
+                  />
+                </View>
+              </View>
+            )}
+          />
 
-      {/* BUSCAS */}
-      <Text style={styles.subtitulo}>🔍 Buscar</Text>
-      <TextInput placeholder="ID" value={idBusca} onChangeText={setIdBusca} style={styles.input} />
-      <Button title="Buscar por ID" onPress={fetchBaladaById} />
+          {/* BUSCAS */}
+          <Text style={styles.subtitulo}>🔍 Buscar</Text>
+          <TextInput placeholder="ID" value={idBusca} onChangeText={setIdBusca} style={styles.input} />
+          <Button title="Buscar por ID" onPress={fetchBaladaById} />
 
-      <TextInput placeholder="Nome" value={nomeBusca} onChangeText={setNomeBusca} style={styles.input} />
-      <Button title="Buscar por Nome" onPress={fetchBaladasByNome} />
+          <TextInput placeholder="Nome" value={nomeBusca} onChangeText={setNomeBusca} style={styles.input} />
+          <Button title="Buscar por Nome" onPress={fetchBaladasByNome} />
 
-      <TextInput placeholder="Cidade" value={cidadeBusca} onChangeText={setCidadeBusca} style={styles.input} />
-      <Button title="Buscar por Cidade" onPress={fetchBaladasByCidade} />
+          <TextInput placeholder="Cidade" value={cidadeBusca} onChangeText={setCidadeBusca} style={styles.input} />
+          <Button title="Buscar por Cidade" onPress={fetchBaladasByCidade} />
 
-      <TextInput placeholder="Tipo" value={tipoBusca} onChangeText={setTipoBusca} style={styles.input} />
-      <Button title="Buscar por Tipo" onPress={fetchBaladasByTipo} />
+          <TextInput placeholder="Tipo" value={tipoBusca} onChangeText={setTipoBusca} style={styles.input} />
+          <Button title="Buscar por Tipo" onPress={fetchBaladasByTipo} />
 
-      <TextInput placeholder="Data (YYYY-MM-DD)" value={dataBusca} onChangeText={setDataBusca} style={styles.input} />
-      <Button title="Buscar por Data" onPress={fetchBaladasByData} />
+          <TextInput placeholder="Data (YYYY-MM-DD)" value={dataBusca} onChangeText={setDataBusca} style={styles.input} />
+          <Button title="Buscar por Data" onPress={fetchBaladasByData} />
 
-      {/* FORMULÁRIO ADD/EDITAR */}
-      <Text style={styles.subtitulo}>
-        {idEditar ? "✏️ Editar Balada" : "➕ Adicionar Balada"}
-      </Text>
-      <TextInput placeholder="Nome" value={nome} onChangeText={setNome} style={styles.input} />
-      <TextInput placeholder="Cidade" value={cidade} onChangeText={setCidade} style={styles.input} />
-      <TextInput placeholder="Endereço" value={endereco} onChangeText={setEndereco} style={styles.input} />
-      <TextInput placeholder="Tipo" value={tipo} onChangeText={setTipo} style={styles.input} />
-      <TextInput placeholder="Data (YYYY-MM-DD)" value={data} onChangeText={setData} style={styles.input} />
+          {/* FORMULÁRIO ADD/EDITAR */}
+          <Text style={styles.subtitulo}>
+            {idEditar ? "✏️ Editar Balada" : "➕ Adicionar Balada"}
+          </Text>
+          <TextInput placeholder="Nome" value={nome} onChangeText={setNome} style={styles.input} />
+          <TextInput placeholder="Cidade" value={cidade} onChangeText={setCidade} style={styles.input} />
+          <TextInput placeholder="Endereço" value={endereco} onChangeText={setEndereco} style={styles.input} />
+          <TextInput placeholder="Tipo" value={tipo} onChangeText={setTipo} style={styles.input} />
+          <TextInput placeholder="Data (YYYY-MM-DD)" value={data} onChangeText={setData} style={styles.input} />
 
-      {/* Botão final: adiciona ou edita */}
-      <Button
-        title={idEditar ? "Atualizar Balada" : "Adicionar Balada"}
-        onPress={idEditar ? updateBalada : addBalada}
-      />
+          {/* Botão final: adiciona ou edita */}
+          <Button
+            title={idEditar ? "Atualizar Balada" : "Adicionar Balada"}
+            onPress={idEditar ? updateBalada : addBalada}
+          />
 
-      <View style={{ height: 20 }} />
-    </ScrollView>
+          <View style={{ height: 20 }} />
+        </ScrollView>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 
 /* ---------------- ESTILOS ---------------- */
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, marginTop: 40 },
+  container: { flex: 1, padding: 20, marginTop: 40, backgroundColor: "#f2f2f2" },
   titulo: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: "bold",
-    marginBottom: 10,
     textAlign: "center",
+    marginBottom: 10,
+    color: "#00796b",
   },
-  subtitulo: { fontSize: 18, fontWeight: "bold", marginTop: 20 },
+  subtitulo: { fontSize: 20, fontWeight: "bold", marginTop: 20, color: "#004d40" },
   input: {
     borderWidth: 1,
     borderColor: "#ccc",
-    padding: 8,
+    padding: 10,
     marginVertical: 5,
-    borderRadius: 5,
+    borderRadius: 8,
+    backgroundColor: "#fff",
   },
-  card: { padding: 10, marginVertical: 5, borderWidth: 1, borderRadius: 5 },
+  card: {
+    padding: 15,
+    marginVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  cardTitle: { fontWeight: "bold", fontSize: 16, color: "#00796b" },
+  cardText: { fontSize: 14, color: "#555", marginTop: 3 },
+  buttonEdit: {
+    flex: 1,
+    backgroundColor: "#ffb300",
+    padding: 10,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  buttonDelete: {
+    flex: 1,
+    backgroundColor: "#d32f2f",
+    padding: 10,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  buttonSearch: {
+    backgroundColor: "#00796b",
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    marginVertical: 5,
+  },
+  buttonAdd: {
+    backgroundColor: "#388e3c",
+    padding: 15,
+    borderRadius: 8,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  buttonText: { color: "#fff", fontWeight: "bold" },
 });
