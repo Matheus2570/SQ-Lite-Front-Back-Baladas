@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 
-const API_URL = "http://192.168.107.27:3000/baladas";
+const API_URL = "http://(Coloque Seu IP Aqui):3000/baladas";
 
 export default function App() {
   const [baladas, setBaladas] = useState([]);
