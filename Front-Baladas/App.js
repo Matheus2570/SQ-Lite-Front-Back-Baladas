@@ -11,7 +11,7 @@ import {
 } from "react-native";
 
 // URL da API (seu backend Express rodando no PC ou servidor)
-const API_URL = "http://(Coloque seu IP Aqui):3000/baladas";
+const API_URL = "http://(Coloque Seu IP Aqui):3000/baladas";
 
 export default function App() {
   /* ---------------- ESTADOS ---------------- */
