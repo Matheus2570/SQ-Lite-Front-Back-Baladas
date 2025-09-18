@@ -4,5 +4,5 @@ CREATE TABLE baladas (
     cidade VARCHAR(50) NOT NULL,
     endereco VARCHAR(200)NOT NULL,
     tipo VARCHAR(50)NOT NULL,
-    data VARCHAR(10) NOT NULL
+    data DATE NOT NULL
 );
