@@ -20,7 +20,7 @@ import {
 
 // URL da API (seu backend Express rodando no PC ou servidor)
 // Altere o IP para o endereço da sua máquina, se necessário.
-const API_URL = "http:// 10.136.35.15:3000/baladas"; // Laura 
+const API_URL = "http://(COloque seu IP Aqui):3000/baladas"; 
 
 export default function App() {
   /* ---------------- ESTADOS ---------------- */
